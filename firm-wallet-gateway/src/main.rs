@@ -15,16 +15,21 @@
  * See the License for the specific language governing permissions and limitations under the License.
  */
 use dotenv::dotenv;
+use airwallex_webhook::AirwallexWebhookServer;
 use firm_wallet_gateway::Node;
 use gateway_framework::gateway::Gateway;
 use hologram_protos::firm_wallet::account_management_servicepb::account_management_service_server::AccountManagementServiceServer;
 use hologram_protos::firm_wallet::balance_operation_servicepb::balance_operation_service_server::BalanceOperationServiceServer;
+use std::error::Error;
 use std::env;
 use std::net::SocketAddr;
 use tonic::transport::Server;
 use tracing::{info, Level};
 
+pub mod airwallex_webhook;
 pub mod firm_wallet_gateway;
+
+type BoxError = Box<dyn Error + Send + Sync>;
 
 #[tokio::main]
 async fn main() {
@@ -32,14 +37,29 @@ async fn main() {
     dotenv().ok();
 
     let gateway_service = Gateway::<Node>::new();
-    let address = get_server_address();
-    info!("Firm wallet gateway service listen on address: {}", address);
-    Server::builder()
-        .add_service(BalanceOperationServiceServer::new(gateway_service.clone()))
-        .add_service(AccountManagementServiceServer::new(gateway_service))
-        .serve(address)
-        .await
-        .unwrap();
+    let grpc_address = get_server_address();
+    let webhook_server =
+        AirwallexWebhookServer::from_env().expect("Failed to configure Airwallex webhook server");
+
+    info!("Firm wallet gateway service listen on address: {}", grpc_address);
+
+    tokio::try_join!(
+        async move {
+            Server::builder()
+                .add_service(BalanceOperationServiceServer::new(gateway_service.clone()))
+                .add_service(AccountManagementServiceServer::new(gateway_service))
+                .serve(grpc_address)
+                .await
+                .map_err(|error| -> BoxError { Box::new(error) })
+        },
+        async move {
+            webhook_server
+                .serve()
+                .await
+                .map_err(|error| -> BoxError { Box::new(error) })
+        }
+    )
+    .unwrap();
 }
 
 pub fn get_server_address() -> SocketAddr {

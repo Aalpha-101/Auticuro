@@ -20,10 +20,16 @@ async-trait = "0.1"
 # tonic grpc client & server
 tonic = { version = "0.5.2", features = ["tls"] }
 tower = "0.4.7"
+hyper = { version = "0.14", features = ["server", "http1", "tcp"] }
 
 # tools
 dotenv = "0.15.0"
 thiserror = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+hmac = "0.12.1"
+sha2 = "0.10.6"
+subtle = "2.4.1"
 
 # logging
 tracing = "0.1"
@@ -31,4 +37,3 @@ tracing-subscriber = "0.3"
 
 [dev-dependencies]
 rusty-hook = "^0.11.2"
-
