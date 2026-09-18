@@ -90,14 +90,20 @@ impl AirwallexWebhookServer {
         let timestamp = match read_header(request.headers(), AIRWALLEX_TIMESTAMP_HEADER) {
             Some(timestamp) => timestamp,
             None => {
-                warn!(outcome = "missing_timestamp", "Rejected Airwallex webhook request");
+                warn!(
+                    outcome = "missing_timestamp",
+                    "Rejected Airwallex webhook request"
+                );
                 return response(StatusCode::UNAUTHORIZED, "missing signature headers");
             }
         };
         let signature = match read_header(request.headers(), AIRWALLEX_SIGNATURE_HEADER) {
             Some(signature) => signature,
             None => {
-                warn!(outcome = "missing_signature", "Rejected Airwallex webhook request");
+                warn!(
+                    outcome = "missing_signature",
+                    "Rejected Airwallex webhook request"
+                );
                 return response(StatusCode::UNAUTHORIZED, "missing signature headers");
             }
         };
@@ -111,7 +117,7 @@ impl AirwallexWebhookServer {
         };
 
         match self
-            .handle_signed_payload(timestamp, signature, raw_body)
+            .handle_signed_payload(&timestamp, &signature, raw_body)
             .await
         {
             Ok(processed_response) => processed_response,
@@ -160,14 +166,14 @@ impl AirwallexWebhookConfig {
     pub fn from_env() -> Result<Self, ConfigError> {
         let host = env::var("AIRWALLEX_WEBHOOK_BIND_ADDR")
             .unwrap_or_else(|_| DEFAULT_WEBHOOK_BIND_ADDR.to_string());
-        let port = env::var("AIRWALLEX_WEBHOOK_PORT")
-            .unwrap_or_else(|_| DEFAULT_WEBHOOK_PORT.to_string());
+        let port =
+            env::var("AIRWALLEX_WEBHOOK_PORT").unwrap_or_else(|_| DEFAULT_WEBHOOK_PORT.to_string());
         let bind_address = format!("{}:{}", host, port)
             .parse::<SocketAddr>()
             .map_err(ConfigError::InvalidBindAddress)?;
 
-        let webhook_secret = env::var("AIRWALLEX_WEBHOOK_SECRET")
-            .map_err(|_| ConfigError::MissingWebhookSecret)?;
+        let webhook_secret =
+            env::var("AIRWALLEX_WEBHOOK_SECRET").map_err(|_| ConfigError::MissingWebhookSecret)?;
 
         if webhook_secret.trim().is_empty() {
             return Err(ConfigError::MissingWebhookSecret);
@@ -199,9 +205,7 @@ struct AirwallexEventEnvelope {
     request_id: Option<String>,
 }
 
-fn deserialize_optional_string<'de, D>(
-    deserializer: D,
-) -> Result<Option<String>, D::Error>
+fn deserialize_optional_string<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
@@ -224,6 +228,8 @@ pub struct RecordedWebhookEvent {
 }
 
 struct BoundedWebhookRecorder {
+    // TODO: Replace this bounded in-memory recorder with durable shared storage for multi-replica
+    // production deployments so deduplication survives process restarts.
     inner: Mutex<BoundedWebhookRecorderState>,
 }
 
@@ -322,7 +328,10 @@ impl WebhookError {
     fn into_response(self) -> Response<Body> {
         match self {
             Self::InvalidSignature => {
-                warn!(outcome = "invalid_signature", "Rejected Airwallex webhook request");
+                warn!(
+                    outcome = "invalid_signature",
+                    "Rejected Airwallex webhook request"
+                );
                 response(StatusCode::UNAUTHORIZED, "invalid signature")
             }
             Self::MalformedPayload(error) => {
@@ -331,7 +340,10 @@ impl WebhookError {
             }
             Self::Persistence(error) => {
                 error!(error = %error, outcome = "persistence_failed", "Failed to record Airwallex webhook");
-                response(StatusCode::INTERNAL_SERVER_ERROR, "failed to record webhook")
+                response(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "failed to record webhook",
+                )
             }
         }
     }
@@ -343,8 +355,8 @@ fn verify_signature(
     raw_body: &[u8],
     provided_signature: &str,
 ) -> Result<(), WebhookError> {
-    let mut mac =
-        HmacSha256::new_from_slice(secret.as_bytes()).map_err(|_| WebhookError::InvalidSignature)?;
+    let mut mac = HmacSha256::new_from_slice(secret.as_bytes())
+        .map_err(|_| WebhookError::InvalidSignature)?;
     mac.update(timestamp.as_bytes());
     mac.update(raw_body);
 
@@ -371,8 +383,11 @@ fn to_lower_hex(bytes: &[u8]) -> String {
         .collect::<String>()
 }
 
-fn read_header<'a>(headers: &'a hyper::HeaderMap<HeaderValue>, name: &str) -> Option<&'a str> {
-    headers.get(name).and_then(|value| value.to_str().ok())
+fn read_header(headers: &hyper::HeaderMap<HeaderValue>, name: &str) -> Option<String> {
+    headers
+        .get(name)
+        .and_then(|value| value.to_str().ok())
+        .map(|value| value.to_string())
 }
 
 fn response(status: StatusCode, body: &'static str) -> Response<Body> {
@@ -522,7 +537,10 @@ mod tests {
         let response = server.handle_request(request).await;
 
         assert_eq!(response.status(), StatusCode::OK);
-        assert_eq!(server.recorded_events()[0].event_type, "something.completely_new");
+        assert_eq!(
+            server.recorded_events()[0].event_type,
+            "something.completely_new"
+        );
     }
 
     #[tokio::test]

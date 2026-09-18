@@ -1,4 +1,5 @@
 #![allow(clippy::new_without_default)]
+use airwallex_webhook::AirwallexWebhookServer;
 /**
  * Copyright 2022 Airwallex (Hong Kong) Limited
  *
@@ -15,13 +16,12 @@
  * See the License for the specific language governing permissions and limitations under the License.
  */
 use dotenv::dotenv;
-use airwallex_webhook::AirwallexWebhookServer;
 use firm_wallet_gateway::Node;
 use gateway_framework::gateway::Gateway;
 use hologram_protos::firm_wallet::account_management_servicepb::account_management_service_server::AccountManagementServiceServer;
 use hologram_protos::firm_wallet::balance_operation_servicepb::balance_operation_service_server::BalanceOperationServiceServer;
-use std::error::Error;
 use std::env;
+use std::error::Error;
 use std::net::SocketAddr;
 use tonic::transport::Server;
 use tracing::{info, Level};
@@ -41,7 +41,10 @@ async fn main() {
     let webhook_server =
         AirwallexWebhookServer::from_env().expect("Failed to configure Airwallex webhook server");
 
-    info!("Firm wallet gateway service listen on address: {}", grpc_address);
+    info!(
+        "Firm wallet gateway service listen on address: {}",
+        grpc_address
+    );
 
     tokio::try_join!(
         async move {
